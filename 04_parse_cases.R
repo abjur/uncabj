@@ -13,10 +13,12 @@ source("01_download_parte_aassumpcao.R")
 #------------------------------------------------------------------------------#
 # Load Packages
 #------------------------------------------------------------------------------#
-library(magrittr)
-library(tidyverse)
-library(abjutils)
-library(esaj)
+library(magrittr)  # 1.5
+library(tidyverse) # 1.2.1
+library(abjutils)  # 0.2.1.9
+library(esaj)      # 0.1.2.9
+library(ssh)       # 0.2
+library(parallel)  # 3.5.1
 
 # #----------------------------------------------------------------------------#
 # # Load Politician Database
@@ -35,43 +37,35 @@ library(esaj)
 # Load database
 load("candidatos.sp.Rdata")
 
-# #----------------------------------------------------------------------------#
-# # Download individual cases for all politicians in database
-# #----------------------------------------------------------------------------#
-# # Look up and save politicians parts to judicial cases
-# # Trials Court Cases Directory
-# dir.create(path = "./first")
+#----------------------------------------------------------------------------#
+# Download individual cases for all politicians in database
+#----------------------------------------------------------------------------#
+# Connect to UNC server to download politician files. You will not be able to
+# do this on your own because you are not authorized to use my account.
+# Nevertheless, this is necessary for record keeping.
+session <- ssh_connect("aa2015@longleaf.unc.edu")
 
-# # Define the total number of iterations (= 100 for test purposes)
-# # total <- nrow(candidatos)
-# total <- 100
+# Upload trial and appeals R scripts to server
+scp_upload(session, files   = ".",
+                    to      = "/pine/scr/a/a/aa2015/politicians/",
+                    verbose = TRUE)
 
-# # Find all cases
-# for (i in seq(1:total)) {
-#   # Keep track of progression
-#   print(paste0("Iteration ", i, " of ", total))
+# Issue command to run shell script
+ssh_exec_wait(session, c("cd /pine/scr/a/a/aa2015/politicians/",
+                         "sbatch tjsp-appeals.sh",
+                         "sbatch tjsp-trials.sh"))
 
-#   # Download each trial court case
-#   download_cpopg_parte(candidatos.sp[i, "NOME_COMPLETO"],
-#                        path = "./first",
-#                        nome_completo = TRUE
-#   )
-# }
 
-# # Appeals Court Cases Directory
-# dir.create(path = "./second")
+# Download files to local folder. Saved in different folder than the git repo.
+scp_download(session, files   = "/pine/scr/a/a/aa2015/politicians/first",
+                      to      = "../politicians",
+                      verbose = TRUE)
+scp_download(session, files   = "/pine/scr/a/a/aa2015/politicians/second",
+                      to      = "../politicians",
+                      verbose = TRUE)
 
-# # Find all cases
-# for (i in seq(1:total)) {
-#   # Keep track of progression
-#   print(paste0("Iteration ", i, " of ", total))
-
-#   # Download each appeals court case
-#   download_cposg_parte(candidatos.sp[i, "NOME_COMPLETO"],
-#                        path = "./second",
-#                        nome_completo = TRUE
-#   )
-# }
+# # Disconnect from server
+# ssh_disconnect(session)
 
 #------------------------------------------------------------------------------#
 # Filter politicians with case at both trial and appeals stages
@@ -88,28 +82,10 @@ cases.data <- as.tibble(cases.both) %>%
   separate(value, into = c("name", "case.number", "html"), remove = TRUE) %>%
   select(-html)
 
-# Define end for end below
-last <- nrow(cases.data)
+# Save database for web scraper
+save(cases.data, file = "cases.data.Rda")
 
-# Download sequence of decisions
-for (i in seq(1:last)) {
 
-  # Keep track of iterations
-  iteration <- paste0("Iteration ", i, " of ", last)
-  print(iteration)
-
-  # Define structure for file names
-  person   <- cases.data[i,]
-  folder.1 <- paste0("./politicians/cjpg/", person[1], person[2], "/")
-  folder.2 <- paste0("./politicians/cjsg/", person[1], person[2], "/")
-
-  # Download cases
-  esaj::download_cjpg(as.character(person[2]), path = folder.1, max_page = 2)
-  esaj::download_cjsg(as.character(person[2]), path = folder.2, max_page = 2)
-
-  # Do not clog user's environment
-  if (i == last) {rm(iteration, folder.1, folder.2, person)}
-}
 
 # Files that can be processed from html to data points
 cjpg  <- list.files("./politicians/cjpg", recursive = TRUE, pattern = "page")
