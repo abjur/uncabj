@@ -82,6 +82,10 @@ cases.data <- as.tibble(cases.both) %>%
   separate(value, into = c("name", "case.number", "html"), remove = TRUE) %>%
   select(-html)
 
+# Save objects for further use
+saveRDS(case.trials,  file = "case.trials.rds")
+saveRDS(case.appeals, file = "case.appeals.rds")
+
 # Save database for web scraper
 save(cases.data, file = "cases.data.Rda")
 
@@ -95,21 +99,31 @@ save(cases.data, file = "cases.data.Rda")
 #                          "sbatch 03_scraper_decisions_pg.sh",
 #                          "sbatch 03_scraper_decisions_sg.sh"))
 
+# # Download files to local folder. Saved in different folder than the git repo.
+# scp_download(session, files   = "/pine/scr/a/a/aa2015/politicians/cjpg",
+#                       to      = "../politicians",
+#                       verbose = TRUE)
+# scp_download(session, files   = "/pine/scr/a/a/aa2015/politicians/cjsg",
+#                       to      = "../politicians",
+#                       verbose = TRUE)
+
+# # Disconnect from server
+# ssh_disconnect(session)
 
 # Files that can be processed from html to data points
-cjpg  <- list.files("./politicians/cjpg", recursive = TRUE, pattern = "page")
-cjsg  <- list.files("./politicians/cjsg", recursive = TRUE, pattern = "page")
+cjpg  <- list.files("../politicians/cjpg", recursive = TRUE, pattern = "page")
+cjsg  <- list.files("../politicians/cjsg", recursive = TRUE, pattern = "page")
 
 # Define folder path
-dir.1 <- paste0("./politicians/cjpg/", cjpg)
-dir.2 <- paste0("./politicians/cjsg/", cjsg)
+dir.1 <- paste0("../politicians/cjpg/", cjpg)
+dir.2 <- paste0("../politicians/cjsg/", cjsg)
 
 # Create datasets
-candidate.trial   <- esaj::parse_cjpg(dir.1)
-candidate.appeals <- esaj::parse_cjsg(dir.2)
-
+decisions.trial   <- esaj::parse_cjpg(dir.1)
+decisions.appeals <- esaj::parse_cjsg(dir.2)
+getwd()
 # Save datasets
-save(candidate.trial,   file = "./uncabj/candidate.trial.Rdata")
-save(candidate.appeals, file = "./uncabj/candidate.appeals.Rdata")
+save(decisions.trial,   file = "decisions.trial.Rda")
+save(decisions.appeals, file = "decisions.appeals.Rda")
 
-
+?esaj::parse_cjpg
