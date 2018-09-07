@@ -9,3 +9,4 @@ UNC-ABJ joint project.
 3. Send scripts to remote processing for download of politician data. CHECK
 4. Write and run html parsing script.
 5. Preliminary data analysis.
+6. Write python and R TSE scrapers for case and protocol numbers. CHECK
