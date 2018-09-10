@@ -107,29 +107,32 @@ tse_case <- function(sequential, sigla_ue, year) {
 ################################################################################
 # Load Test Dataset
 ################################################################################
-# # Candidates info in 2016
-# load('./tse/candidates.2016.Rda')
+# Candidates info in 2016
+load('candidates.2016.Rda')
 
-# # Download function
-# candidates.test <- sample_n(candidates.2016, 1)
-# View(candidates.test)
+# Download function
+candidates.test <- candidates.2016 %>%
+  filter(CODIGO_CARGO == 11) %>%
+  filter(DESCRICAO_ELEICAO == 'Eleições Municipais 2016') %>%
+  sample_n(1000)
 
-# # Empty dataset
-# data <- tibble()
 
-# # Run for loop
-# for (i in 1:nrow(candidates.test)) {
+# Empty dataset
+data <- tibble()
 
-#   # Define Search parameters
-#   politician   <- unlist(candidates.test[i, "SEQUENCIAL_CANDIDATO"])
-#   electoral.id <- unlist(candidates.test[i, "SIGLA_UE"])
+# Run for loop
+for (i in 1:nrow(candidates.test)) {
 
-#   # Build dataset
-#   data         <- rbind(data, tse_case(politician, electoral.id, 2016))
+  # Define Search parameters
+  politician   <- unlist(candidates.test[i, "SEQUENCIAL_CANDIDATO"])
+  electoral.id <- unlist(candidates.test[i, "SIGLA_UE"])
 
-#   # Print loop progress
-#   print(paste0('Row ', i, ' of ', nrow(candidates.test)))
-# }
+  # Build dataset
+  data         <- rbind(data, tse_case(politician, electoral.id, 2016))
+
+  # Print loop progress
+  print(paste0('Row ', i, ' of ', nrow(candidates.test)))
+}
 
 # stop all docker container
 system('docker stop $(docker ps -aq)')
