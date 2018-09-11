@@ -20,11 +20,15 @@ import re
 # scraper function
 def tse_case(candidateID, electoralUnitID, electionYear, browser):
     # parameters for search
+    # unique election ID
     electionID = np.select([electionYear == 2004, electionYear == 2008,
                             electionYear == 2012, electionYear == 2016],
                             [14431, 14422, 1699, 2])
+    # base url
     main  = 'http://divulgacandcontas.tse.jus.br/divulga/#/candidato'
-    xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "ng-binding", " " ))]'
+    # case and protocol xpaths
+    casePath = '//*[contains(@data-ng-if, "numeroProcesso")]'
+    protPath = '//*[contains(@href, "nprot")]'
 
     # concatenate web address
     url = [main, str(electionYear), str(electionID), str(electoralUnitID),
@@ -38,13 +42,27 @@ def tse_case(candidateID, electoralUnitID, electionYear, browser):
             # navigate to url
             browser.get(url)
             # check if elements are located
-            visible = EC.presence_of_all_elements_located((By.XPATH, xpath))
+            caseVisible = EC.presence_of_element_located((By.XPATH, casePath))
+            protVisible = EC.presence_of_element_located((By.XPATH, protPath))
             # wait elements have not yet been located
-            WebDriverWait(browser, 3).until(visible)
+            WebDriverWait(browser, 3).until(caseVisible)
+            WebDriverWait(browser, 3).until(protVisible)
             # if they have, download such elements
-            webElem1 = browser.find_elements_by_xpath(xpath)
+            caseElem = browser.find_elements_by_xpath(casePath)
+            protElem = browser.find_elements_by_xpath(protPath)
             # and put them all into one
-            data1 = [x.text for x in webElem1]
+            caseNum = [x.text for x in caseElem]
+            protNum = [x.get_attribute('href') for x in protElem]
+            # recheck if case number empty or string
+            while caseNum[0].isnumeric() == False:
+                time.sleep(.5)
+                caseNum = [x.text for x in caseElem]
+                break
+            # recheck if protocol number empty
+            while len(protNum[0]) == 0:
+                time.sleep(.5)
+                protNum = [x.get_attribute('href') for x in protElem]
+                break
             # exit loop if successful
             break
         except StaleElementReferenceException as Exception:
@@ -58,7 +76,8 @@ def tse_case(candidateID, electoralUnitID, electionYear, browser):
     # bring together information provided as arguments to function and list
     # found on website
     data = [str(candidateID), str(electoralUnitID), str(electionYear)]
-    data.extend(data1)
+    data.append(caseNum[0])
+    data.append(protNum[0])
 
     # return data
     return data

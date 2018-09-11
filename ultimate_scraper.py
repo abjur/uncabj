@@ -14,14 +14,15 @@ import pandas as pd
 import pymongo
 import time
 import re
-# import scraper
-from tse_case_relative_xpath import tse_case
 
 ################################################################################
 # initial options
 # set working dir
 os.chdir('/Users/aassumpcao/OneDrive - University of North Carolina ' +
   'at Chapel Hill/Documents/Research/2018 TSE')
+
+# import scraper
+from tse_case_relative_xpath import tse_case
 
 # define chrome options
 CHROME_PATH      ='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -55,28 +56,37 @@ candidateCases = [['candidateID', 'electoralUnitID', 'electionYear', 'caseNum',
                   'protNum']]
 
 # run scraper for random sample of 1,000 individuals
-for x in range(0, 50):
+for x in range(0, 1000):
+
     # pull sequential numbers from table
     candidateID     = candidates.loc[x, 'candidateID']
     electoralUnitID = candidates.loc[x, 'electoralUnitID']
 
-    # run scraper
-    row = tse_case(candidateID, electoralUnitID, 2016, browser)
-    time.sleep(1)
-    row = tse_case(candidateID, electoralUnitID, 2016, browser)
-    # check if information has been found; otherwise, run it again
+    # run scraper capturing browser crash error
+    try:
+        row = tse_case(candidateID, electoralUnitID, 2016, browser)
+    except:
+        browser.quit()
+        browser = webdriver.Chrome(executable_path = CHROMEDRIVER_PATH,
+                                   chrome_options  = chrome_options)
+        # set implicit wait for page load
+        browser.implicitly_wait(60)
+
+        # run scraper
+        row = tse_case(candidateID, electoralUnitID, 2016, browser)
 
     # print information
-    print(row)
-    'Iteration ' + str(x + 1) + ' of 1000 successful'
+    print('Iteration ' + str(x + 1) + ' of 1000 successful')
 
     # bind to dataset
     candidateCases.append(row)
 
-# # transform list into dataframe
-# candidateCases = pd.DataFrame(candidateCases, columns = candidateCases[0])
+# transform list into dataframe
+candidateCases = pd.DataFrame(candidateCases)
 
-# # save to file
-# feather.write_dataframe(candidateCases, 'candidateCases.feather')
+# save to file
+feather.write_dataframe(candidateCases, 'candidateCases.feather')
 
+# quit browser
 browser.quit()
+
