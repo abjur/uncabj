@@ -20,7 +20,7 @@ import re
 # scraper function
 def tse_case(candidateID, electoralUnitID, electionYear, browser):
     # parameters for search
-    # unique election ID
+    # unique election ID as function of electoral year
     electionID = np.select([electionYear == 2004, electionYear == 2008,
                             electionYear == 2012, electionYear == 2016],
                             [14431, 14422, 1699, 2])
@@ -44,21 +44,21 @@ def tse_case(candidateID, electoralUnitID, electionYear, browser):
             # check if elements are located
             caseVisible = EC.presence_of_element_located((By.XPATH, casePath))
             protVisible = EC.presence_of_element_located((By.XPATH, protPath))
-            # wait elements have not yet been located
+            # wait up to 3s for elements to be located
             WebDriverWait(browser, 3).until(caseVisible)
             WebDriverWait(browser, 3).until(protVisible)
-            # if they have, download such elements
+            # if they have been found, download such elements
             caseElem = browser.find_elements_by_xpath(casePath)
             protElem = browser.find_elements_by_xpath(protPath)
-            # and put them all into one
+            # and add them to lists (elem1 = pull text; elem2 = pull attr value)
             caseNum = [x.text for x in caseElem]
             protNum = [x.get_attribute('href') for x in protElem]
-            # recheck if case number empty or string
-            while caseNum[0].isnumeric() == False:
+            # recheck if case number (element 1) contains incorrect info
+            while caseNum[0].find('informa') != -1:
                 time.sleep(.5)
                 caseNum = [x.text for x in caseElem]
                 break
-            # recheck if protocol number empty
+            # recheck if protocol number is empty
             while len(protNum[0]) == 0:
                 time.sleep(.5)
                 protNum = [x.get_attribute('href') for x in protElem]
@@ -73,12 +73,12 @@ def tse_case(candidateID, electoralUnitID, electionYear, browser):
             # the loop
             continue
 
-    # bring together information provided as arguments to function and list
-    # found on website
+    # bring together information provided as arguments to function call and list
+    # of elements found on website
     data = [str(candidateID), str(electoralUnitID), str(electionYear)]
     data.append(caseNum[0])
     data.append(protNum[0])
 
-    # return data
+    # return call
     return data
 
