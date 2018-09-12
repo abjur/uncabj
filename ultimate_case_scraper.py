@@ -11,7 +11,7 @@ import feather
 import os
 import numpy as np
 import pandas as pd
-import pymongo
+# import pymongo
 import time
 import re
 
@@ -22,7 +22,7 @@ os.chdir('/Users/aassumpcao/OneDrive - University of North Carolina ' +
   'at Chapel Hill/Documents/Research/2018 TSE')
 
 # import scraper
-from tse_case_relative_xpath import tse_case
+from tse_case import tse_case
 
 # define chrome options
 CHROME_PATH      ='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -38,6 +38,7 @@ chrome_options.binary_location = CHROME_PATH
 # open invisible browser
 browser = webdriver.Chrome(executable_path = CHROMEDRIVER_PATH,
                            chrome_options  = chrome_options)
+
 # set implicit wait for page load
 browser.implicitly_wait(60)
 
@@ -81,12 +82,13 @@ for x in range(0, 1000):
     # bind to dataset
     candidateCases.append(row)
 
+# quit browser
+browser.quit()
+
+################################################################################
+# wrangle data
 # transform list into dataframe
 candidateCases = pd.DataFrame(candidateCases)
 
 # save to file
 feather.write_dataframe(candidateCases, 'candidateCases.feather')
-
-# quit browser
-browser.quit()
-

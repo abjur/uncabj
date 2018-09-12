@@ -1,4 +1,4 @@
-# tse scraper
+# tse case number scraper
 # developed by:
 # Andre Assumpcao
 # andre.assumpcao@gmail.com
@@ -19,7 +19,7 @@ import re
 
 # scraper function
 def tse_case(candidateID, electoralUnitID, electionYear, browser):
-    # parameters for search
+    # search parameters
     # unique election ID as function of electoral year
     electionID = np.select([electionYear == 2004, electionYear == 2008,
                             electionYear == 2012, electionYear == 2016],
