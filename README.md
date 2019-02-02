@@ -11,3 +11,5 @@ UNC-ABJ joint project.
 5. Preliminary data analysis.
 6. Write Python and R TSE scrapers for case and protocol numbers. CHECK
 7. Write Python TSE scrapers for judicial decisions. CHECK
+
+(List is out of date. This repository is constantly changing.)
