@@ -3,41 +3,57 @@
 # Andre Assumpcao
 # andre.assumpcao@gmail.com
 
-# import statements
+# import standard libraries
 import codecs
 import glob
+import math
+import numpy as np
+import os
 import pandas as pd
 import re
-import os
+import time
+
+# import third-party libraries
 from bs4 import BeautifulSoup
-from selenium import webdriver
+from selenium                          import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions        import NoSuchElementException
 from selenium.common.exceptions        import TimeoutException
 from selenium.common.exceptions        import StaleElementReferenceException
 from selenium.webdriver.common.by      import By
 from selenium.webdriver.common.keys    import Keys
+from selenium.webdriver.support.ui     import Select
 from selenium.webdriver.support.ui     import WebDriverWait
 from selenium.webdriver.support        import expected_conditions as EC
-import numpy as np
-import time
-import re
 
 # define scraper class
 class scraper:
-    """series of methods to download TSE court documents
 
-    attributes:
-        browser:    placeholder for selenium browser call
+    """
+        the scraper class contains methods used to download data from
+        tse websites. it visits two pages: (i) any candidate's profile
+        and (ii) the decision regarding their candidacy.
 
-    methods:
-        case:       download case and protocol number
-        decision:   use protocol number to download judicial decision        
+        attributes:
+            browser:    placeholder for selenium browser call
+
+        methods:
+            case:       download case and protocol number
+            decision:   use protocol number to download judicial decision
     """
     # define static arguments for all methods in the scraper class
     browser = []
     page = []
     main = 'http://divulgacandcontas.tse.jus.br/divulga/#/candidato'
     java = 'return document.getElementsByTagName("html")[0].innerHTML'
+
+    # xpath search pattern for case method
+    prot = '//*[contains(@href, "nprot")][not(contains(@href, "undefined"))]'
+
+    # xpath search patterns for decision method
+    xpath    = '//*[contains(@value, "Todos")]'
+    viewPath = '//*[@value="Visualizar"]'
+    errPath  = '//*[@color="RED"]'
 
     # init method share by all class instances
     def __init__(self, browser):
@@ -48,199 +64,126 @@ class scraper:
 
     # case number scraper function
     def case(self, electionYear, electionID, electoralUnitID, candidateID):
-        """method to download case number by candidate information"""        
-        
-        # search parameters
-        # case and protocol xpaths
-        casePath = '//*[contains(@data-ng-if, "numeroProcesso")]'
-        protPath = '//*[contains(@href, "nprot")]'
 
-        # create list with elements used to visit page
-        self.page = [self.main, str(electionYear), str(electionID), \
-                                str(electoralUnitID), str(candidateID)]
-               
+        """ method to download case number by candidate information """
+
+        # turn method arguments to strings
+        args = locals()
+        pageargs = [str(value) for key, value in args.items() if key != 'self']
+
         # concatenate everything and form page address
-        self.page = '/'.join(self.page)
+        self.page = '/'.join([self.main] + pageargs)
 
-        # counter to handle stale or timeout exceptions
-        exception = 1
-        
-        # while loop to return to page if information is not in the DOM
-        while True:
-            try:
-                # navigate to candidate page
-                self.browser.get(self.page)
-                
-                # check if case and protocol are visible in webpage
-                caseVis = EC.presence_of_element_located((By.XPATH, casePath))
-                protVis = EC.presence_of_element_located((By.XPATH, protPath))
-                
-                # wait up to 3s for elements to be located
-                WebDriverWait(self.browser, 3).until(caseVis)
-                WebDriverWait(self.browser, 3).until(protVis)
-                
-                # if case and protocol have been found, download such elements
-                caseElem = self.browser.find_elements_by_xpath(casePath)
-                protElem = self.browser.find_elements_by_xpath(protPath)
-                
-                # add to list (elem1 = pull text; elem2 = pull attr value)
-                caseNum = [x.text for x in caseElem]
-                protNum = [x.get_attribute('href') for x in protElem]
-                
-                # define counter to break loop in error cases
-                counter = 1
+        # try information in DOM
+        try:
+            # navigate to candidate page
+            self.browser.get(self.page)
 
-                # recheck if case number (element 1) contains incorrect info
-                while caseNum[0].find('Informa') == 0 & counter < 31:
-                    time.sleep(.5)
-                    caseNum = [x.text for x in caseElem]
-                    counter += 1
-                    break
-                
-                # define counter to break loop in error cases
-                counter = 1
-                
-                # recheck if protocol number is empty
-                while protNum[0].find('nprot=undefined') == 0 & counter < 31:
-                    time.sleep(.5)
-                    protNum = [x.get_attribute('href') for x in protElem]
-                    counter += 1
-                    break
-                
-                # exit loop if successful
-                break
+            # check if protocol number is visible in webpage
+            # caseVis = EC.presence_of_element_located((By.XPATH, casePath))
+            protVis = EC.presence_of_element_located((By.XPATH, self.prot))
 
-            # handle stale element exception    
-            except StaleElementReferenceException as Exception:
-                
-                # run this thirty times before breaking loop
-                exception += 1
-                if exception > 30:
-                    caseNum = ['staleException']
-                    protNum = ['staleException']
-                    break
-                
-                # if element is not in DOM, return to the top of the loop
-                continue
+            # wait up to 60s for elements to be located
+            # WebDriverWait(browser, 60).until(caseVis)
+            WebDriverWait(self.browser, 10).until(protVis)
 
-            # handle timeout exception
-            except TimeoutException as Exception:
-                
-                # run this thirty times before breaking loop
-                exception += 1
-                if exception > 30:
-                    caseNum = ['timeoutException']
-                    protNum = ['timeoutException']
-                    break
-                
-                # if we spend too much time looking for elements, return to top 
-                # of the loop
-                continue
-        
-        # bring together information provided as arguments to function call and 
-        # list of elements found on website
-        data = [str(electionYear), str(electionID), str(electoralUnitID),
-                str(candidateID)]
-        data.append(caseNum[0])
-        data.append(protNum[0])
+            # if protocol number has been found, download it
+            # caseElem = browser.find_element_by_xpath(casePath)
+            protElem = self.browser.find_element_by_xpath(self.prot)
+
+            # extract text from caseNum and href from protNum
+            # caseNum = caseElem.text
+            protNum = protElem.get_attribute('href')
+
+        # handle exception
+        except StaleElementReferenceException as Exception:
+            # caseNum = ['staleException']
+            protNum = 'staleElementException'
+
+        # handle exception
+        except TimeoutException as Exception:
+            # caseNum = ['timeoutException']
+            protNum = 'timeoutException'
 
         # return case and protocol numbers as list
-        return data
+        return protNum
 
-    # decision scraper function 
-    def decision(self, url = None):
-        """method to download tse decisions by url"""
+    # decision scraper function
+    def decision(self, url = None, filename = 'decision'):
+
+        """ method to download tse decisions by url """
+
+        # skip out if url has not been provided
+        if url == None: return 'URL not loaded'
 
         # store url for scraping decisions
         self.url = url
 
-        # skip out if url has not been provided
-        if url == None: return 'URL not loaded'
-        
-        # xpath search patterns
-        xpath    = '//*[contains(@value, "Todos")]'
-        viewPath = '//*[@value="Visualizar"]'
-        errPath  = '//*[text()="Problemas"]'
-
-        # extract case number from url
-        num = re.search('(?<=nprot=)(.)*(?=&)', self.url).group(0)
-
-        # replace weird characters by nothing
-        num = re.sub(r'\/|\.|\&|\%|\-', '', num)
-
-        # while loop to load tse decision page
-        while True:
-            try:
-                # navigate to url
-                self.browser.get(self.url)
-                
-                # check if elements are located
-                decision = EC.presence_of_element_located((By.XPATH, viewPath))
-                
-                # wait up to 3s for last element to be located
-                WebDriverWait(self.browser, 3).until(decision)
-                
-                # when element is found, click on 'andamento', 'despacho', and
-                # 'view' so that the browser opens up the information we want
-                decision  = self.browser.find_element_by_xpath(xpath).click()
-                visualize = self.browser.find_element_by_xpath(viewPath).click()
-                
-                # save inner html to object
-                html = self.browser.execute_script(self.java)
-                
-                # create while loop for recheck
-                counter = 1
-                while len(html) == 0 | counter < 5:
-                    time.sleep(.5)
-                    html = self.browser.execute_script(self.java)
-                    counter += 1
-                    break
-                fail = 0
-                break
-            
-            # handle stale element exception
-            except StaleElementReferenceException as Exception:
-                # if element is not in DOM, return to the top of the loop
-                continue
-            
-            # handle timeout exception
-            except TimeoutException as Exception:
-                # if we spend too much time looking for elements, return to top
-                #  of the loop
-                error = EC.presence_of_element_located((By.XPATH, errPath))
-                if error != '':
-                    fail = 1
-                    html = 'Nothing found'
-                    print('Prot or case ' + str(num) + ' not found')
-                    break
-                continue
-
-        # different names for files looked up via protocol or case number
-        if fail == 1:
-            file = './error' + str(num) + '.html'
-        else:
-            file = './prot' + str(num) + '.html'
-
-        # save to file
+        # catch error
         try:
-            codecs.open(file, 'w', 'cp1252').write(html)
+            # navigate to url
+            self.browser.get(self.url)
+
+            # check if elements are located
+            dec = EC.presence_of_element_located((By.XPATH, self.viewPath))
+
+            # wait up to 3s for last element to be located
+            WebDriverWait(self.browser, 15).until(dec)
+
+            # when element is found, click on 'andamento', 'despacho',
+            # and 'view' so that the browser opens up the information we
+            # want
+            self.browser.find_element_by_xpath(self.xpath).click()
+            self.browser.find_element_by_xpath(self.viewPath).click()
+
+            # save inner html to object
+            html = self.browser.execute_script(self.java)
+
+            # define filename
+            if filename == 'decision':
+                file = 'decision.html'
+            else:
+                # provide name to file
+                file = str(filename) + '.html'
+            # save to file
+            try:
+                codecs.open(file, 'w', 'cp1252').write(html)
+            except:
+                codecs.open(file, 'w', 'utf-8').write(html)
+
+            # print message
+            return 'Download successful'
+
+        except NoSuchElementException as Exception:
+            e = EC.presence_of_element_located((By.XPATH, self.errPath))
+            WebDriverWait(self.browser, 1).until(e)
+            return 'Download failed: NoSuchElementException'
+
+        except TimeoutException as Exception:
+            return 'Download failed: timeoutException'
+
+        except StaleElementReferenceException as Exception:
+            return 'Download failed: staleElementException'
+
         except:
-            codecs.open(file, 'w', 'utf-8').write(html)
+            return 'Download failed: reason unknown'
 
 # define parser class
 class parser:
-    """series of methods to wrangle TSE court documents
 
-    attributes:
-        file:                path to html containing the candidacy decision
+    """
+        series of methods to wrangle TSE court documents
 
-    methods:
-        parse_summary:       parse summary table
-        parse_updates:       parse case updates
-        parse_details:       parse sentence details
-        parse_related_cases: parse references to other cases
-        parse_related_docs:  parse references to other documents
-        parse_all:           parse everything above
+        attributes:
+            file:                path to judicial decision html file
+
+        methods:
+            parse_summary:       parse summary table
+            parse_updates:       parse case updates
+            parse_details:       parse sentence details
+            parse_related_cases: parse references to other cases
+            parse_related_docs:  parse references to other documents
+            parse_all:           parse everything above
     """
 
     # define static variables used for parsing all tables
@@ -250,11 +193,24 @@ class parser:
     # define regex compile for substituting weird characters in all tables
     regex0 = re.compile(r'\n|\t')
     regex1 = re.compile(r'\\n|\\t')
-    regex2 = re.compile(r'\\xa0')
+    regex2 = re.compile('\xa0')
+    regex3 = re.compile(' +')
+    regex4 = re.compile('^PROCESSO')
+    regex5 = re.compile('^MUNIC[IÍ]PIO')
+    regex6 = re.compile('^PROTOCOLO')
+    regex7 = re.compile('^(requere|impugnan|recorren|litis)', re.IGNORECASE)
+    regex8 = re.compile('^(requeri|impugnad|recorri|candid)', re.IGNORECASE)
+    regex9 = re.compile('^(ju[íi]z|relator)', re.IGNORECASE)
+    regex10 = re.compile('^assunt', re.IGNORECASE)
+    regex11 = re.compile('^localiz', re.IGNORECASE)
+    regex12 = re.compile('^fase', re.IGNORECASE)
+    regex13 = re.compile('(?<=:)(.)*')
+    regex14 = re.compile('(Despach|Senten|(Decis.*?=Plenária))')
 
     # init method shared by all class instances
     def __init__(self, file):
-        """load into class the file which will be parsed"""
+
+        """ load into class the file which will be parsed """
 
         # try cp1252 encoding first or utf-8 if loading fails
         try:
@@ -268,263 +224,139 @@ class parser:
         # find all tables in document
         self.tables = self.soup.find_all('table')
 
+        # isolate latter tables
+        kwargs = {'class': 'titulo_tabela'}
+        self.xtable = [td.text for t in self.tables \
+                       for td in t.find_all('td', **kwargs)]
+        self.xtable = {t: i + 1 for i, t in enumerate(self.xtable)}
+
     #1 parse summary info table:
     def parse_summary(self, transpose = False):
-        """method to wrangle summary information"""
+
+        """ method to wrangle summary information """
 
         # initial objects for parser
         # isolate summary table
         table = self.tables[0]
 
-        # find all rows in table
-        rows = table.find_all('tr')
+        # find all rows in table and extract their text
+        rows = [tr.text for tr in table.find_all('tr')]
 
-        ### find simple information
-        # find case, municipality, and protocol information from table
-        case = [td.text for td in rows[0].find_all('td')]
-        town = [td.text for td in rows[1].find_all('td')]
-        prot = [td.text for td in rows[2].find_all('td')]
+        # clean up text
+        rows = [re.sub(self.regex0, '', row) for row in rows]
+        rows = [re.sub(self.regex1, '', row) for row in rows]
+        rows = [re.sub(self.regex2, '', row) for row in rows]
+        rows = [re.sub(self.regex3,' ', row) for row in rows]
 
-        # split title and information
-        case = ['case', ''.join(case[1:])]
-        town = ['town', ''.join(town[1:])]
-        prot = ['prot', ''.join(prot[1:])]
+        # slice javascript out of list
+        rows = rows[:-1]
 
-        ### find more complex elements
-        #1 find claimants using regex
-        regex3 = re.compile('(requere|impugnan|recorren|litis)', re.IGNORECASE)
+        # filter down each row to text that matters
+        info = {
+            'case'     : list(filter(self.regex4.search,  rows)),
+            'town'     : list(filter(self.regex5.search,  rows)),
+            'prot'     : list(filter(self.regex6.search,  rows)),
+            'claimants': list(filter(self.regex7.search,  rows)),
+            'defendant': list(filter(self.regex8.search,  rows)),
+            'judge'    : list(filter(self.regex9.search,  rows)),
+            'subject'  : list(filter(self.regex10.search, rows)),
+            'district' : list(filter(self.regex11.search, rows)),
+            'stage'    : list(filter(self.regex12.search, rows))
+        }
 
-        # create list of claimant information
-        claimants = []
+        # strip keys in dictionary values
+        for k, v in info.items():
+            info[k] = [re.search(self.regex13, i).group() for i in info[k]]
+            info[k] = [i.strip() for i in info[k]]
+            if len(info[k]) > 1: info[k] = [' '.join(info[k])]
 
-        # for each row in the summary table:
-        for row in rows:
-            # find rows that match the claimant regex
-            if row.find_all(text = regex3) != []:
-                # extract all columns and join them into one observation
-                claimant = [td.text for td in row.find_all('td')]
-                claimant = ''.join(claimant[1:])
-                # append to claimant list
-                claimants.append(claimant)
+        # replace missing values for None
+        summary = {k: [None] if not v else v for k, v in info.items()}
 
-        # format list
-        claimants = ['claimants', ';;'.join(claimants[1:]) \
-                                  if len(claimants) > 1 else claimants[0]]
+        # # flatten list of values into scalars
+        # summary = {k: v for k, v in info.items() for v in info[k]}
 
-        #2 find plaintiffs using regex
-        regex4 = re.compile('(requeri|impugnad|recorri|candid)', re.IGNORECASE)
-
-        # create list of plaintiff information
-        plaintiffs = []
-
-        # for each row in the summary table:
-        for row in rows:
-            # find rows that match the plaintiff regex
-            if row.find_all(text = regex4) != []:
-                # extract all columns and join them into one observation
-                plaintiff = [td.text for td in row.find_all('td')]
-                plaintiff = ''.join(plaintiff[1:])
-                # append to plaintiff list
-                plaintiffs.append(plaintiff)
-
-        # format list
-        plaintiffs = ['plaintiffs', ';;'.join(plaintiffs[1:]) \
-                                    if len(plaintiffs) > 1 else plaintiffs[0]]
-
-        #3 find judges using regex
-        regex5 = re.compile('(ju[íi]z|relator)', re.IGNORECASE)
-
-        # create list of judge information
-        judges = []
-
-        # for each row in the summary table:
-        for row in rows:
-            # find rows that match the judge regex
-            if row.find_all(text = regex5) != []:
-                # extract all columns and join them into one observation
-                judge = [td.text for td in row.find_all('td')]
-                judge = ''.join(judge[1:])
-                # append to judge list
-                judges.append(judge)
-
-        # format list
-        judges = ['judges', ';;'.join(judges[1:]) \
-                            if len(judges) > 1 else judges[0]]
-
-        ### find last information
-        # find case subject, location, and stage in table
-        regex6 = re.compile('assunt',  re.IGNORECASE)
-        regex7 = re.compile('localiz', re.IGNORECASE)
-        regex8 = re.compile('fase',    re.IGNORECASE)
-
-        # find subject, location, and stage information from table
-        subj  = [row.text for row in rows if row.find_all(text = regex6) != []]
-        loc   = [row.text for row in rows if row.find_all(text = regex7) != []]
-        stage = [row.text for row in rows if row.find_all(text = regex8) != []]
-
-        # split title and information
-        subj  = ['subject',  re.sub('(.)*:', '', str(subj))]
-        loc   = ['location', re.sub('(.)*:', '', str(loc))]
-        stage = ['stage',    re.sub('(.)*:', '', str(stage))]
-
-        # join all information into single dataset
-        summary = [case, town, prot, claimants, plaintiffs, \
-                   judges, subj, loc, stage]
-
-        # transform into pandas dataframe
-        summary = pd.DataFrame(summary)
-
-        # remove weird characters
-        summary = summary.replace(self.regex0, ' ', regex = True)
-        summary = summary.replace(self.regex1, ' ', regex = True)
-        summary = summary.replace(self.regex2, ' ', regex = True)
-        summary = summary.replace(' +', ' ', regex = True)
-
-        # assign column names
-        summary.columns = ['variables', 'values']
-
-        # return outcome if transpose is not provided as argument
-        if transpose == False:
-            return pd.DataFrame(summary)
-        else:
-            summary = summary.T
-            summary.columns = summary.iloc[0]
-            return pd.DataFrame(summary[1:])
+        # return dictionary of information
+        return summary
 
     #2 parse case updates
     def parse_updates(self):
-        """method to wrangle case updates information"""
 
-        # initial objects for parser
+        """ method to wrangle case updates information """
+
         # isolate updates table
         table = self.tables[1]
 
-        # define regex to find table title
-        regex3 = re.compile('data', re.IGNORECASE)
-
-        ### for loop to find table indexes
         # find all rows in table
-        rows = table.find_all('tr')
+        cols = [td.text for row in table.find_all('tr') \
+                for td in row.find_all('td')]
 
-        # define counter for finding the first row to parse
-        i = -1
+        # clean up text
+        cols = [re.sub(self.regex0, '', col) for col in cols]
+        cols = [re.sub(self.regex1, '', col) for col in cols]
+        cols = [re.sub(self.regex2, '', col) for col in cols]
+        cols = [re.sub(self.regex3,' ', col) for col in cols]
+        cols = [col.strip() for col in cols]
 
-        # loop incrementing row index
-        for row in rows:
-            i += 1
-            if row.find_all(text = regex3) != []:
-                i += 1
-                break
+        # create dictionary
+        update = {'zone': cols[4::3], 'date': cols[5::3], 'update': cols[6::3]}
 
-        ### for loop to extract table text and build dataset
-        # defined case updates
-        updates = []
-
-        # build table
-        for row in rows:
-            # extract information in each line
-            line = [td.text for td in row.find_all('td')]
-            # append to empty object
-            updates.append(line)
-
-        # build database
-        updates = updates[i:len(rows)]
-
-        # transform into pandas dataframe
-        updates = pd.DataFrame(updates)
-
-        # remove weird characters
-        updates = updates.replace(self.regex0, ' ', regex = True)
-        updates = updates.replace(self.regex1, ' ', regex = True)
-        updates = updates.replace(self.regex2, ' ', regex = True)
-        updates = updates.replace(' +', ' ', regex = True)
-
-        # assign column names
-        updates.columns = ['zone', 'date', 'update']
-
-        # return outcome
-        return pd.DataFrame(updates)
+        # return dictionary of information
+        return update
 
     #3 parse judicial decisions
     def parse_details(self):
-        """method to wrangle case decisions"""
 
-        ### initial objects for parser
-        # try catch error if table doesn't exist
-        try:
-            # isolate updates and further tables
-            tables = self.tables[2:]
+        """ method to wrangle case decisions """
 
-            # define regex to find table title
-            regex3 = re.compile('despach|senten|decis', re.IGNORECASE)
-            regex4 = re.compile(r'\n', re.IGNORECASE)
+        # empty placeholder for the details table
+        index = None
 
-            # find the position of tables with decisions
-            decisions = [i for i in range(len(tables)) if \
-                         re.search(regex3, tables[i].td.get_text())]
+        # find table to parse
+        for k, v in self.xtable.items():
+            if re.search(self.regex14, k):
+                index = int(v)
 
-            # define empty lists for position, head, and body of decisions
-            shead = []
-            sbody = []
+        # end program if index is empty
+        if index is None: return {'shead': [None], 'sbody': [None]}
 
-            # for loop extracting the positions and the content of sentence head
-            for i in decisions:
-                # create empty list of head and body of decisions per table
-                spos  = []
-                tbody = []
-                # define total number of rows per table
-                rows  = tables[i].find_all('tr')
-                prows = len(tables[i].find_all('tr'))
-                # extract sentence head and position per table
-                for tr, x in zip(rows, range(prows)):
-                    if tr['class'] == ['tdlimpoImpar']:
-                        spos.append(x)
-                        shead.append(tr.text)
-                # add last row in sequence
-                spos.append(prows)
-                # extract sentence body per head per table
-                for y, z in zip(spos[:-1], range(len(spos[:-1]))):
-                    tbody.append([y + 1, spos[z + 1]])
-                    # subset sentences per head
-                    for t in tbody:
-                        decision = [rows[w].text for w in range(t[0], t[1])]
-                        decision = ''.join(decision[:])
-                    # bind decisions as the same length as head
-                    sbody.append(decision)
+        # choose updates table to parse
+        table = self.tables[index]
 
-            # build database taking into account potential parsing failures
-            nrow = max(len(shead), len(sbody))
+        # extract rows from table
+        kwarg = {'class': 'tdlimpoImpar'}
+        shead = [tr.text for tr in table.find_all('tr', **kwarg)]
+        kwarg = {'class': 'tdlimpoPar'}
+        sbody = [tr.text for tr in table.find_all('tr', **kwarg)]
 
-            # define the number of observations
-            bindhead = ['Parsing Failure'] * (nrow - len(shead))
-            bindbody = ['Parsing Failure'] * (nrow - len(sbody))
+        # clean up headers
+        shead = [re.sub(self.regex0, '', i) for i in shead]
+        shead = [re.sub(self.regex1, '', i) for i in shead]
+        shead = [re.sub(self.regex2, '', i) for i in shead]
+        shead = [re.sub(self.regex3,' ', i) for i in shead]
+        shead = [i.strip() for i in shead]
 
-            # bind at the end of lists
-            shead.extend(bindhead)
-            sbody.extend(bindbody)
+        # clean up body
+        sbody = [re.sub(self.regex0, '', i) for i in sbody]
+        sbody = [re.sub(self.regex1, '', i) for i in sbody]
+        sbody = [re.sub(self.regex2, '', i) for i in sbody]
+        sbody = [re.sub(self.regex3,' ', i) for i in sbody]
+        sbody = [i.strip() for i in sbody]
 
-            # build corrected dataset
-            sentences = pd.DataFrame(list(zip(shead, sbody)))
+        # assign updates to dictionary
+        if len(shead) == len(sbody):
+            details = {'shead': shead, 'sbody': sbody}
+        else:
+            sbody = [i + ' ' + j for i, j in zip(sbody[::2], sbody[1::2])]
+            details = {'shead': shead, 'sbody': sbody}
 
-            # remove weird characters
-            sentences = sentences.replace(self.regex0, ' ', regex = True)
-            sentences = sentences.replace(self.regex1, ' ', regex = True)
-            sentences = sentences.replace(self.regex2, ' ', regex = True)
-            sentences = sentences.replace(' +', ' ', regex = True)
-
-            # assign column names
-            sentences.columns = ['head', 'body']
-
-            # return outcome
-            return pd.DataFrame(sentences)
-
-        # throw error if table is not available
-        except:
-            return 'There are no sentence details here.'
+        # return dictionary of information
+        return details
 
     #4 parse related cases
     def parse_related_cases(self):
-        """method to wrangle case decisions"""
+
+        """ method to wrangle case decisions """
 
         ### initial objects for parser
         # try catch error if table doesn't exist
@@ -576,7 +408,8 @@ class parser:
 
     #5 parse related documents
     def parse_related_docs(self):
-        """method to parse related docs into a single dataset"""
+
+        """ method to parse related docs into a single dataset """
 
         ### initial objects for parser
         # try catch error if table doesn't exist
@@ -621,14 +454,15 @@ class parser:
 
     #6 return full table
     def parse_all(self):
-        """method to parse all tables into a single dataset"""
+
+        """ method to parse all tables into a single dataset """
 
         ### call other parser functions
         # parse tables we know exist
         table1 = self.parse_summary(transpose = True)
         table2 = self.parse_updates()
 
-        # insert column for identifying case information (updates) 
+        # insert column for identifying case information (updates)
         table2.insert(0, 'caseinfo', 'updates')
 
         # parse tables we are not sure exist
