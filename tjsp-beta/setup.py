@@ -1,7 +1,7 @@
 import setuptools
 
 # meta-data
-NAME            = 'tjsp'
+NAME            = 'tjsp-beta'
 DESCRIPTION     = 'Package used to scrape and parse decisions from TJ-SP'
 URL             = 'https://github.com/abjur/uncabj'
 EMAIL           = 'andre.assumpcao@gmail.com'
